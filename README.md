@@ -10,6 +10,19 @@ AlphaLens AI is a modular Streamlit prototype for institutional-style trading an
 - UI and domain/service layers are intentionally separated.
 - Test-ready, GitHub-ready Python package layout.
 
+## Macro Analysis
+
+The Market Regime Engine is a deterministic, explainable service built around
+the strategy material's macro-to-allocation workflow. It uses GDP growth,
+inflation, policy-rate changes, PMI, unemployment, equity returns, volatility,
+the yield curve, and credit spreads to classify **Recovery**, **Expansion**,
+**Late Expansion**, **Peak**, or **Contraction**. It returns a Macro Score,
+Risk Score, sector outlook, decision rationale, and investment recommendation.
+
+The thresholds and sector mappings live in
+`src/alphalens/services/market_regime_engine.py`, not the page layer, so they
+can be reviewed and calibrated as source-document extraction is added.
+
 ## Project layout
 
 ```text
