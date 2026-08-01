@@ -40,11 +40,11 @@ alphalens-ai/
 ## Streamlit Community Cloud deployment
 
 Deploy the **entire contents** of this repository, not `app.py` by itself. In
-the repository root, the deployment must include both `app.py` and
-`src/alphalens/`. The first `-e .` entry in `requirements.txt` installs the
-local package during Cloud build; `app.py` also adds `src/` to the import path
-as a fallback. Set the Cloud main file path to `app.py`, then reboot the app
-after pushing all files.
+the repository root, the deployment should include both `app.py` and
+`src/alphalens/`; `app.py` adds `src/` to the import path before loading the
+modular application. It also provides a deployment-safe Phase 1 shell when a
+Cloud repository contains only the entry point. Set the Cloud main file path
+to `app.py`, then reboot the app after pushing the update.
 
 ## Supplied source material
 
