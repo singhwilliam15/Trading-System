@@ -37,6 +37,15 @@ alphalens-ai/
 3. Copy the supplied `.docx` and `.xlsx` files into `data/raw/` (they are intentionally not committed).
 4. Run: `streamlit run app.py`
 
+## Streamlit Community Cloud deployment
+
+Deploy the **entire contents** of this repository, not `app.py` by itself. In
+the repository root, the deployment must include both `app.py` and
+`src/alphalens/`. The first `-e .` entry in `requirements.txt` installs the
+local package during Cloud build; `app.py` also adds `src/` to the import path
+as a fallback. Set the Cloud main file path to `app.py`, then reboot the app
+after pushing all files.
+
 ## Supplied source material
 
 The source catalogue expects these files in `data/raw/`:
