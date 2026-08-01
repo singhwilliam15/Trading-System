@@ -31,6 +31,15 @@ Quality, Growth, Value, and Momentum factor scores into a Buy, Hold, or Sell
 screening recommendation. Inputs should be consistent in currency and unit;
 the result is a research screen, not personalised financial advice.
 
+## Technical Analysis
+
+Upload a chronological OHLCV CSV with `Open`, `High`, `Low`, `Close`, and
+`Volume` columns (at least 60 rows). The Technical Analysis Engine computes
+RSI, MACD, EMA, SMA, ADX, ATR, SuperTrend, Bollinger Bands, volume ratios,
+20-period support/resistance, and breakout status. It also creates an
+ATR-and-support-based long trade plan with position size, stop loss, target,
+capital at risk, and risk-reward from the entered risk settings.
+
 ## Project layout
 
 ```text

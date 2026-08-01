@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from alphalens.domain.macro import MacroInputs
 from alphalens.domain.stock import StockInputs
+from alphalens.domain.technical import TechnicalConfig
 from alphalens.services.market_regime_engine import MarketRegimeEngine
 from alphalens.services.stock_analysis_engine import StockAnalysisEngine
+from alphalens.services.technical_analysis_engine import TechnicalAnalysisEngine
 from alphalens.services.source_registry import SourceRegistry
 from alphalens.ui.page_factory import render_module_placeholder
 
@@ -151,7 +154,43 @@ def render_stock_analysis() -> None:
 
 
 def render_technical_analysis() -> None:
-    render_module_placeholder("Technical Analysis", "Trend, momentum, volatility, and execution signal analysis.")
+    """Render CSV-driven technical analysis without mixing calculations into the UI."""
+    st.title("Technical Analysis")
+    st.caption("OHLCV indicators, breakout screening, and ATR-based trade planning")
+    uploaded = st.file_uploader("Upload chronological OHLCV CSV", type="csv", help="Required columns: Open, High, Low, Close, Volume. At least 60 rows.")
+    first, second, third = st.columns(3)
+    capital = first.number_input("Trading capital", min_value=1.0, value=100_000.0, step=1_000.0)
+    risk_pct = second.number_input("Risk per trade (%)", min_value=0.1, max_value=5.0, value=1.0, step=0.1)
+    target_rr = third.number_input("Target risk-reward", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
+    if uploaded is None:
+        st.info("Upload an OHLCV CSV to calculate indicators. No synthetic price data is used.")
+        return
+    try:
+        assessment = TechnicalAnalysisEngine().assess(
+            pd.read_csv(uploaded),
+            TechnicalConfig(capital=capital, risk_per_trade_pct=risk_pct, target_risk_reward=target_rr),
+        )
+    except (ValueError, pd.errors.ParserError) as error:
+        st.error(str(error))
+        return
+    left, middle, right = st.columns(3)
+    left.metric("Technical signal", assessment.signal.value)
+    middle.metric("Breakout status", assessment.breakout)
+    right.metric("Volume", assessment.volume_assessment)
+    st.subheader("Price and trend")
+    st.line_chart(assessment.indicator_frame[["close", "ema_20", "sma_20", "sma_50", "supertrend", "bb_upper", "bb_lower"]], use_container_width=True)
+    st.subheader("Latest indicators")
+    st.dataframe([assessment.indicators], hide_index=True, use_container_width=True)
+    st.subheader("Support, resistance, and trade plan")
+    plan = assessment.trade_plan
+    st.dataframe([{
+        "Support": round(assessment.support, 2), "Resistance": round(assessment.resistance, 2),
+        "Entry": round(plan.entry_price, 2), "Stop loss": round(plan.stop_loss, 2),
+        "Target": round(plan.target_price, 2), "Position size": plan.position_size,
+        "Capital at risk": round(plan.capital_at_risk, 2), "Risk-reward": f"1:{plan.risk_reward:.1f}",
+    }], hide_index=True, use_container_width=True)
+    for item in assessment.rationale:
+        st.write(f"• {item}")
 
 
 def render_portfolio() -> None:
