@@ -40,6 +40,15 @@ RSI, MACD, EMA, SMA, ADX, ATR, SuperTrend, Bollinger Bands, volume ratios,
 ATR-and-support-based long trade plan with position size, stop loss, target,
 capital at risk, and risk-reward from the entered risk settings.
 
+## Risk Management
+
+The Risk Dashboard accepts a worksheet from the supplied VaR workbook, or a
+CSV containing a numeric price or return column. Select whether the source is
+prices, decimal returns, or percentage returns. It calculates Historical VaR,
+Parametric VaR, Monte Carlo VaR, Expected Shortfall, Maximum Drawdown, Sharpe
+Ratio, and Sortino Ratio using the selected confidence level, horizon, and
+portfolio value.
+
 ## Project layout
 
 ```text

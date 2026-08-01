@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from io import BytesIO
+
+import numpy as np
 import pandas as pd
 import streamlit as st
 
 from alphalens.domain.macro import MacroInputs
+from alphalens.domain.risk import RiskConfig
 from alphalens.domain.stock import StockInputs
 from alphalens.domain.technical import TechnicalConfig
 from alphalens.services.market_regime_engine import MarketRegimeEngine
+from alphalens.services.risk_engine import RiskEngine
 from alphalens.services.stock_analysis_engine import StockAnalysisEngine
 from alphalens.services.technical_analysis_engine import TechnicalAnalysisEngine
 from alphalens.services.source_registry import SourceRegistry
@@ -198,7 +203,67 @@ def render_portfolio() -> None:
 
 
 def render_risk_management() -> None:
-    render_module_placeholder("Risk Management", "Exposure controls and VaR-driven risk monitoring.")
+    """Render the VaR workbook-compatible portfolio risk dashboard."""
+    st.title("Risk Management")
+    st.caption("Historical · Parametric · Monte Carlo VaR · Expected Shortfall")
+    uploaded = st.file_uploader("Upload VaR workbook, price CSV, or return CSV", type=["xlsx", "xls", "csv"])
+    if uploaded is None:
+        st.info("Upload the supplied VaR workbook or a CSV. Select the worksheet/column containing chronological prices or periodic returns.")
+        return
+    try:
+        file_bytes = uploaded.getvalue()
+        if uploaded.name.lower().endswith((".xlsx", ".xls")):
+            workbook = pd.ExcelFile(BytesIO(file_bytes))
+            sheet = st.selectbox("Workbook sheet", workbook.sheet_names)
+            data = pd.read_excel(BytesIO(file_bytes), sheet_name=sheet)
+        else:
+            data = pd.read_csv(BytesIO(file_bytes))
+    except (ValueError, OSError, pd.errors.ParserError) as error:
+        st.error(f"Could not read the uploaded file: {error}")
+        return
+    numeric_columns = data.select_dtypes(include="number").columns.tolist()
+    if not numeric_columns:
+        st.error("No numeric columns were found in the selected data source.")
+        return
+    left, middle, right = st.columns(3)
+    column = left.selectbox("Price or return column", numeric_columns)
+    input_type = middle.selectbox("Input type", ("Prices", "Returns (decimal)", "Returns (%)"))
+    confidence = right.selectbox("Confidence level", (0.95, 0.99), format_func=lambda value: f"{value:.0%}")
+    first, second, third = st.columns(3)
+    portfolio_value = first.number_input("Portfolio value", min_value=1.0, value=1_000_000.0, step=10_000.0)
+    horizon = second.number_input("VaR horizon (days)", min_value=1, max_value=30, value=1)
+    risk_free = third.number_input("Annual risk-free rate (%)", min_value=-10.0, max_value=30.0, value=6.0, step=0.1)
+    try:
+        selected = data[column]
+        if input_type == "Prices":
+            returns = RiskEngine.returns_from_prices(selected)
+        else:
+            returns = pd.to_numeric(selected, errors="coerce")
+            if input_type == "Returns (%)":
+                returns = returns / 100
+        assessment = RiskEngine().assess(returns, RiskConfig(
+            portfolio_value=portfolio_value,
+            confidence_level=confidence,
+            horizon_days=horizon,
+            annual_risk_free_rate=risk_free / 100,
+        ))
+    except ValueError as error:
+        st.error(str(error))
+        return
+    first, second, third, fourth = st.columns(4)
+    first.metric("Historical VaR", f"{assessment.historical_var:,.0f}")
+    second.metric("Parametric VaR", f"{assessment.parametric_var:,.0f}")
+    third.metric("Monte Carlo VaR", f"{assessment.monte_carlo_var:,.0f}")
+    fourth.metric("Expected Shortfall", f"{assessment.expected_shortfall:,.0f}")
+    first, second, third, fourth = st.columns(4)
+    first.metric("Maximum drawdown", f"{assessment.maximum_drawdown:.2%}")
+    second.metric("Sharpe ratio", "N/A" if assessment.sharpe_ratio is None else f"{assessment.sharpe_ratio:.2f}")
+    third.metric("Sortino ratio", "N/A" if assessment.sortino_ratio is None else f"{assessment.sortino_ratio:.2f}")
+    fourth.metric("Observations", assessment.observations)
+    histogram, edges = np.histogram(assessment.simulated_returns, bins=40)
+    st.subheader("Monte Carlo return distribution")
+    st.bar_chart(pd.DataFrame({"Frequency": histogram}, index=edges[:-1]), use_container_width=True)
+    st.caption(f"Mean daily return: {assessment.mean_daily_return:.3%} · Daily volatility: {assessment.daily_volatility:.3%}")
 
 
 def render_options_analysis() -> None:
