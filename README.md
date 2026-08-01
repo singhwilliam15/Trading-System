@@ -1,110 +1,59 @@
-# AlphaLens AI 🚀📈
+# AlphaLens AI
 
-**AlphaLens AI** is an enterprise-grade, production-ready Streamlit application engineered for quantitative financial research, macro market analysis, stock screening, options Greeks analytics, portfolio optimization, and Value-at-Risk (VaR) risk management.
+AlphaLens AI is a modular Streamlit prototype for institutional-style trading and investment decisions. Phase 1 establishes the application shell, navigation, source-data boundaries, and engineering foundation; quantitative models and document/workbook extraction follow in later phases.
 
----
+## Features in Phase 1
 
-## 🏗️ Architecture Overview
+- Responsive dark Streamlit interface with ten application modules.
+- Centralized configuration, logging, error handling, and source registry.
+- Source catalogue for the supplied strategy reports and risk-management workbooks.
+- UI and domain/service layers are intentionally separated.
+- Test-ready, GitHub-ready Python package layout.
 
-AlphaLens AI strictly enforces a **Clean Architecture** pattern, decoupling business calculations and quantitative engines (`core/`) from presentation components (`ui/`).
+## Project layout
 
-```
-Trading Strategy/
-├── .github/
-│   └── workflows/
-│       └── ci.yml              # GitHub Actions Continuous Integration
-├── config/                     # Application configurations & logging
-│   ├── settings.py             # Global constants & file paths
-│   └── logging_config.py       # Enterprise logging configuration
-├── core/                       # Pure Business Logic Layer (No UI code)
-│   ├── macro.py                # Economic regime models
-│   ├── stock.py                # Fundamental equity valuation & metrics
-│   ├── technical.py            # Technical analysis & indicator engines
-│   ├── portfolio.py            # Markowitz & Risk-Parity allocation
-│   ├── risk.py                 # Parametric/Historical VaR & Stress testing
-│   ├── options.py              # Black-Scholes & Options Greeks pricing
-│   ├── backtesting.py          # Vectorized quantitative backtest engine
-│   └── reports.py              # Report generation engine
-├── ui/                         # Streamlit UI & Presentation Layer
-│   ├── components/             # Reusable UI widgets & sidebar navigation
-│   │   ├── sidebar.py          # Navigation controller
-│   │   └── widgets.py          # Financial metric cards & alert boxes
-│   ├── styles/
-│   │   └── theme.css           # Premium responsive Dark UI CSS
-│   └── pages/                  # Modular Page Renderers
-│       ├── dashboard.py        # Executive Dashboard Page
-│       ├── macro_analysis.py   # Macroeconomic Analysis Page
-│       ├── stock_analysis.py   # Equity Analysis & Screener Page
-│       ├── technical_analysis.py # Technical Analysis Page
-│       ├── portfolio.py        # Portfolio Management Page
-│       ├── risk_management.py  # Risk Management & VaR Page
-│       ├── options_analysis.py # Derivatives & Options Page
-│       ├── backtesting.py      # Backtest & Strategy Lab Page
-│       ├── reports.py          # Executive Reports & Exports Page
-│       └── settings.py         # Application Settings Page
-├── utils/                      # Helper & Data utilities
-│   ├── excel_loader.py         # Ingestion layer for strategy documents/Excel
-│   └── formatters.py           # Financial formatting helpers
-├── app.py                      # Application entry point & router
-├── requirements.txt            # Python dependencies
-└── README.md                   # Project documentation
+```text
+alphalens-ai/
+├── .streamlit/             # Streamlit UI/runtime configuration
+├── data/
+│   ├── raw/                # Local source reports and workbooks (gitignored)
+│   └── processed/          # Derived datasets (gitignored)
+├── logs/                   # Local application logs (gitignored)
+├── src/alphalens/
+│   ├── core/               # Exceptions and logging
+│   ├── domain/             # Source metadata and future domain models
+│   ├── services/           # Non-UI application services
+│   └── ui/                 # Streamlit app shell and pages
+├── tests/                  # Automated tests
+├── app.py                  # Streamlit entry point
+├── requirements.txt
+└── pyproject.toml
 ```
 
----
+## Setup
 
-## ⚡ Quick Start
+1. Create and activate a Python 3.11+ virtual environment.
+2. Install dependencies and the local package: `pip install -r requirements.txt && pip install -e .`
+3. Copy the supplied `.docx` and `.xlsx` files into `data/raw/` (they are intentionally not committed).
+4. Run: `streamlit run app.py`
 
-### 1. Prerequisites
-- Python 3.10 or higher
-- Virtual environment (`venv` or `conda`)
+## Supplied source material
 
-### 2. Installation & Setup
-```bash
-# Clone the repository
-git clone https://github.com/your-username/alphalens-ai.git
-cd alphalens-ai
+The source catalogue expects these files in `data/raw/`:
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+- `DalalStreet_Elite_Strategy_Report.docx`
+- `Enhanced_Final_Report.docx`
+- `Full_Strategy_Report.docx`
+- `Phase_1_Market_Understanding.docx` through `Phase_5_Derivatives_Strategies.docx`
+- `BS-FIRST PRINCIPLE-STUDENT.xlsx`
+- `VaR_Risk_Management_Tool.xlsx`
 
-# Install production dependencies
-pip install -r requirements.txt
-```
+Phase 2 will convert these inputs into validated, traceable datasets and quantitative services. This repository does not commit personal or source data.
 
-### 3. Launch the Application
-```bash
-streamlit run app.py
-```
+## Engineering conventions
 
----
-
-## 🌟 Key Features
-
-1. **Executive Dashboard**: Real-time overview of portfolio performance, market regime, risk metrics, and top strategy alerts.
-2. **Macroeconomic Analysis**: Macro regime identification, interest rate tracking, inflation indicators, and yield curve visualization.
-3. **Stock Analysis**: Equity fundamental screening, valuation metrics (P/E, EV/EBITDA, ROE), and balance sheet health checks.
-4. **Technical Analysis**: Multi-timeframe indicator computation (RSI, MACD, Moving Averages, Bollinger Bands, ATR).
-5. **Portfolio Allocation**: Mean-variance optimization (Sharpe ratio maximization, Minimum Volatility) & Risk Parity.
-6. **Risk Management & VaR**: Parametric Value-at-Risk (VaR), Historical VaR, Conditional VaR (Expected Shortfall), and Stress Testing scenarios.
-7. **Options & Derivatives**: Black-Scholes pricing, Option Greeks (Delta, Gamma, Vega, Theta, Rho), and strategy payoff diagrams.
-8. **Quantitative Backtesting**: Vectorized strategy execution, drawdowns analysis, win rate, Profit Factor, and Sharpe ratio evaluation.
-9. **Automated Reporting**: Export comprehensive executive reports in structured formats.
-10. **Customizable Settings**: Configurable strategy parameters, risk thresholds, and visual theme settings.
-
----
-
-## 💻 Tech Stack & Design
-
-- **Language**: Python 3.10+
-- **Frontend Framework**: Streamlit
-- **Visualization**: Plotly, Matplotlib
-- **Quantitative Engine**: NumPy, Pandas, SciPy, Scikit-learn
-- **Data Ingestion**: OpenPyXL, Python-docx
-- **UI Theme**: Custom Responsive Dark Mode CSS (`ui/styles/theme.css`)
-
----
-
-## 📜 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+- Add calculations in `src/alphalens/services/`, not in Streamlit page code.
+- Keep page modules limited to presentation and input orchestration.
+- Configure file locations with `ALPHALENS_DATA_DIR` when `data/raw/` is not appropriate.
+- Run tests with `pytest`.
+# AlphaLens AI

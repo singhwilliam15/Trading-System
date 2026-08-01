@@ -1,49 +1,28 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual environments
-venv/
-env/
-ENV/
+# Environments and secrets
 .venv/
+.env
 
-# IDE & Editor settings
+# Runtime and local data
+logs/*.log
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Editors and OS
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# Streamlit config / cache
-.streamlit/
-
-# OS files
 .DS_Store
 Thumbs.db
-
-# Output reports & logs
-*.log
-exports/
-temp/
+# Python
