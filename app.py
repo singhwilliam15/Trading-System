@@ -18,9 +18,8 @@ if str(SRC_DIR) not in sys.path:
 try:
     from alphalens.ui.app_shell import run
 except ModuleNotFoundError as error:
-    # A Streamlit Cloud deployment can be configured with only app.py as its
-    # repository entry point. Preserve a functional Phase 1 shell when the
-    # optional modular package has not been included in that deployment.
+    # Keep the entry point loadable during a partial deployment, while making
+    # the missing modular source explicit instead of presenting it as the app.
     if error.name not in {"alphalens", "alphalens.ui", "alphalens.ui.app_shell"}:
         raise
 
@@ -47,7 +46,8 @@ except ModuleNotFoundError as error:
         module = st.sidebar.radio("Navigation", tuple(_MODULES))
 
         st.title("AlphaLens AI" if module == "Dashboard" else module)
-        st.caption("Institutional Trading & Investment Decision Platform · Phase 1")
+        st.warning("Partial deployment detected: upload the complete `src/alphalens/` folder to enable the implemented analysis engines.")
+        st.caption("Institutional Trading & Investment Decision Platform · Navigation fallback")
         st.info(_MODULES[module])
         if module == "Dashboard":
             left, right = st.columns(2)

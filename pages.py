@@ -29,7 +29,7 @@ def render_dashboard(registry: SourceRegistry) -> None:
     left.metric("Registered research sources", total)
     right.metric("Sources available locally", f"{available}/{total}")
     st.progress(registry.readiness_ratio(), text="Source-data readiness")
-    st.info("Phase 1 is complete: navigation, architecture, and source-data boundaries are established.")
+    st.success("Phase 2 modules are active: Macro Analysis, Stock Analysis, Technical Analysis, and Risk Management.")
 
 
 def render_macro_analysis() -> None:
