@@ -23,6 +23,14 @@ The thresholds and sector mappings live in
 `src/alphalens/services/market_regime_engine.py`, not the page layer, so they
 can be reviewed and calibrated as source-document extraction is added.
 
+## Stock Analysis
+
+The Stock Analysis Engine calculates ROE, ROCE, EPS growth, debt/equity, P/E,
+P/B, EV/EBITDA, Piotroski F-score, and Altman Z-score. It combines transparent
+Quality, Growth, Value, and Momentum factor scores into a Buy, Hold, or Sell
+screening recommendation. Inputs should be consistent in currency and unit;
+the result is a research screen, not personalised financial advice.
+
 ## Project layout
 
 ```text
