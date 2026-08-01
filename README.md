@@ -31,6 +31,20 @@ Quality, Growth, Value, and Momentum factor scores into a Buy, Hold, or Sell
 screening recommendation. Inputs should be consistent in currency and unit;
 the result is a research screen, not personalised financial advice.
 
+### Yahoo Finance automation
+
+Stock Analysis can fetch annual financial statements and two years of price
+history directly from a Yahoo Finance ticker. Technical Analysis and Risk
+Management can fetch OHLCV history from the same ticker, while Portfolio can
+turn a comma-separated ticker list into scored candidates automatically. Use
+the Yahoo symbol exactly as published; for example, Indian NSE symbols normally
+use the `.NS` suffix (`RELIANCE.NS`, `TCS.NS`).
+
+Yahoo Finance occasionally omits a fundamental field or prior-year statement.
+In that case AlphaLens displays a clear data-availability error rather than
+substituting an invented ratio. The CSV and workbook workflows remain
+available as a fallback.
+
 ## Technical Analysis
 
 Upload a chronological OHLCV CSV with `Open`, `High`, `Low`, `Close`, and
@@ -48,6 +62,15 @@ prices, decimal returns, or percentage returns. It calculates Historical VaR,
 Parametric VaR, Monte Carlo VaR, Expected Shortfall, Maximum Drawdown, Sharpe
 Ratio, and Sortino Ratio using the selected confidence level, horizon, and
 portfolio value.
+
+## Portfolio Construction
+
+The Portfolio Engine accepts a candidate CSV containing ticker, sector, price,
+QGVM score, technical signal, daily volatility, and optional current weight.
+It uses the selected Macro Regime, Macro Score, Risk Score, and daily VaR limit
+to construct target holdings. The resulting allocation applies maximum position
+and sector limits, preserves an appropriate cash reserve, calculates whole-share
+position sizes, and issues Buy/Hold/Sell rebalancing instructions.
 
 ## Project layout
 

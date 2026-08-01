@@ -14,11 +14,13 @@ from alphalens.domain.portfolio import PortfolioCandidate, PortfolioConstraints
 from alphalens.domain.risk import RiskConfig
 from alphalens.domain.stock import StockInputs
 from alphalens.domain.technical import TechnicalConfig, TechnicalSignal
+from alphalens.core.exceptions import MarketDataError
 from alphalens.services.market_regime_engine import MarketRegimeEngine
 from alphalens.services.portfolio_construction_engine import PortfolioConstructionEngine
 from alphalens.services.risk_engine import RiskEngine
 from alphalens.services.stock_analysis_engine import StockAnalysisEngine
 from alphalens.services.technical_analysis_engine import TechnicalAnalysisEngine
+from alphalens.services.yahoo_finance_provider import YahooFinanceProvider
 from alphalens.services.source_registry import SourceRegistry
 from alphalens.ui.page_factory import render_module_placeholder
 
@@ -95,6 +97,19 @@ def render_stock_analysis() -> None:
     """Render the factor-based equity screening interface."""
     st.title("Stock Analysis")
     st.caption("Quality · Growth · Value · Momentum (QGVM) Engine")
+    source = st.radio("Data source", ("Yahoo Finance ticker", "Manual financial inputs"), horizontal=True)
+    if source == "Yahoo Finance ticker":
+        ticker = st.text_input("Yahoo Finance ticker", placeholder="RELIANCE.NS, TCS.NS, AAPL")
+        if not st.button("Fetch and score stock", type="primary"):
+            st.info("Enter a ticker. Indian NSE symbols require the `.NS` suffix, for example `RELIANCE.NS`.")
+            return
+        try:
+            assessment = StockAnalysisEngine().assess(YahooFinanceProvider().stock_inputs(ticker))
+        except (MarketDataError, ValueError) as error:
+            st.error(str(error))
+            return
+        _render_stock_assessment(assessment)
+        return
     with st.form("stock_inputs"):
         identity, market, income, balance = st.tabs(["Identity", "Market", "Income", "Balance sheet"])
         with identity:
@@ -146,6 +161,12 @@ def render_stock_analysis() -> None:
     except ValueError as error:
         st.error(str(error))
         return
+
+    _render_stock_assessment(assessment)
+
+
+def _render_stock_assessment(assessment: object) -> None:
+    """Render StockAssessment output shared by manual and Yahoo data sources."""
     factor_columns = st.columns(5)
     for column, label, value in zip(factor_columns, ("Quality", "Growth", "Value", "Momentum", "Composite"), (assessment.quality_score, assessment.growth_score, assessment.value_score, assessment.momentum_score, assessment.composite_score), strict=True):
         column.metric(label, f"{value}/100")
@@ -165,17 +186,37 @@ def render_technical_analysis() -> None:
     """Render CSV-driven technical analysis without mixing calculations into the UI."""
     st.title("Technical Analysis")
     st.caption("OHLCV indicators, breakout screening, and ATR-based trade planning")
-    uploaded = st.file_uploader("Upload chronological OHLCV CSV", type="csv", help="Required columns: Open, High, Low, Close, Volume. At least 60 rows.")
+    source = st.radio("Data source", ("Yahoo Finance ticker", "Upload OHLCV CSV"), horizontal=True, key="technical_source")
+    data: pd.DataFrame
+    if source == "Yahoo Finance ticker":
+        ticker = st.text_input("Yahoo Finance ticker", placeholder="RELIANCE.NS, TCS.NS, AAPL", key="technical_ticker")
+        if st.button("Fetch price history", type="primary", key="technical_fetch"):
+            try:
+                st.session_state["technical_yahoo_data"] = YahooFinanceProvider().price_history(ticker).history
+            except MarketDataError as error:
+                st.error(str(error))
+                return
+        if "technical_yahoo_data" not in st.session_state:
+            st.info("Enter a ticker to fetch its OHLCV history automatically.")
+            return
+        data = st.session_state["technical_yahoo_data"]
+    else:
+        uploaded = st.file_uploader("Upload chronological OHLCV CSV", type="csv", help="Required columns: Open, High, Low, Close, Volume. At least 60 rows.")
+        if uploaded is None:
+            st.info("Upload an OHLCV CSV to calculate indicators. No synthetic price data is used.")
+            return
+        try:
+            data = pd.read_csv(uploaded)
+        except pd.errors.ParserError as error:
+            st.error(str(error))
+            return
     first, second, third = st.columns(3)
     capital = first.number_input("Trading capital", min_value=1.0, value=100_000.0, step=1_000.0)
     risk_pct = second.number_input("Risk per trade (%)", min_value=0.1, max_value=5.0, value=1.0, step=0.1)
     target_rr = third.number_input("Target risk-reward", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
-    if uploaded is None:
-        st.info("Upload an OHLCV CSV to calculate indicators. No synthetic price data is used.")
-        return
     try:
         assessment = TechnicalAnalysisEngine().assess(
-            pd.read_csv(uploaded),
+            data,
             TechnicalConfig(capital=capital, risk_per_trade_pct=risk_pct, target_risk_reward=target_rr),
         )
     except (ValueError, pd.errors.ParserError) as error:
@@ -205,21 +246,52 @@ def render_portfolio() -> None:
     """Render the constrained portfolio construction dashboard."""
     st.title("Portfolio")
     st.caption("Macro regime · QGVM factors · Technical confirmation · VaR constraints")
-    template = pd.DataFrame(columns=["ticker", "sector", "price", "qgvm_score", "technical_signal", "daily_volatility", "current_weight"])
-    st.download_button("Download portfolio input template", template.to_csv(index=False), "portfolio_candidates_template.csv", "text/csv")
-    uploaded = st.file_uploader("Upload portfolio candidates CSV", type="csv", help="Use the template; daily volatility and current weight must be decimal values, e.g. 0.02 and 0.05.")
-    if uploaded is None:
-        st.info("Upload candidate holdings to construct a portfolio. Use results from the Stock and Technical modules for QGVM score and technical signal.")
-        return
-    try:
-        data = pd.read_csv(uploaded)
-        required = {"ticker", "sector", "price", "qgvm_score", "technical_signal", "daily_volatility"}
-        missing = required - set(data.columns)
-        if missing:
-            raise ValueError(f"Candidate file is missing: {', '.join(sorted(missing))}.")
-    except (ValueError, pd.errors.ParserError) as error:
-        st.error(str(error))
-        return
+    source = st.radio("Candidate source", ("Yahoo Finance tickers", "Upload candidate CSV"), horizontal=True, key="portfolio_source")
+    candidates: list[PortfolioCandidate]
+    if source == "Yahoo Finance tickers":
+        ticker_text = st.text_area("Yahoo Finance tickers", placeholder="RELIANCE.NS, TCS.NS, HDFCBANK.NS", help="Separate tickers with commas. Each ticker is fetched, QGVM-scored, and technically analysed.")
+        if st.button("Fetch candidates and construct portfolio", type="primary", key="portfolio_fetch"):
+            symbols = [symbol.strip() for symbol in ticker_text.split(",") if symbol.strip()]
+            if len(symbols) < 2:
+                st.error("Enter at least two comma-separated tickers.")
+                return
+            try:
+                provider = YahooFinanceProvider()
+                st.session_state["portfolio_yahoo_candidates"] = [provider.portfolio_candidate(symbol) for symbol in symbols]
+            except (MarketDataError, ValueError) as error:
+                st.error(f"Could not build portfolio candidates: {error}")
+                return
+        if "portfolio_yahoo_candidates" not in st.session_state:
+            st.info("Enter at least two Yahoo Finance tickers. The engine will fetch price and fundamental data automatically.")
+            return
+        candidates = st.session_state["portfolio_yahoo_candidates"]
+    else:
+        template = pd.DataFrame(columns=["ticker", "sector", "price", "qgvm_score", "technical_signal", "daily_volatility", "current_weight"])
+        st.download_button("Download portfolio input template", template.to_csv(index=False), "portfolio_candidates_template.csv", "text/csv")
+        uploaded = st.file_uploader("Upload portfolio candidates CSV", type="csv", help="Use the template; daily volatility and current weight must be decimal values, e.g. 0.02 and 0.05.")
+        if uploaded is None:
+            st.info("Upload candidate holdings to construct a portfolio. Use results from the Stock and Technical modules for QGVM score and technical signal.")
+            return
+        try:
+            data = pd.read_csv(uploaded)
+            required = {"ticker", "sector", "price", "qgvm_score", "technical_signal", "daily_volatility"}
+            missing = required - set(data.columns)
+            if missing:
+                raise ValueError(f"Candidate file is missing: {', '.join(sorted(missing))}.")
+            if "current_weight" not in data.columns:
+                data["current_weight"] = 0.0
+            data["current_weight"] = data["current_weight"].fillna(0.0)
+            candidates = [
+                PortfolioCandidate(
+                    ticker=str(row.ticker), sector=str(row.sector), price=float(row.price),
+                    qgvm_score=float(row.qgvm_score), technical_signal=TechnicalSignal(str(row.technical_signal).strip().title()),
+                    daily_volatility=float(row.daily_volatility), current_weight=float(row.current_weight),
+                )
+                for row in data.itertuples(index=False)
+            ]
+        except (TypeError, ValueError, pd.errors.ParserError) as error:
+            st.error(f"Portfolio input error: {error}")
+            return
     first, second, third = st.columns(3)
     regime = first.selectbox("Macro regime", list(MarketRegime), format_func=lambda value: value.value)
     macro_score = second.number_input("Macro Score", min_value=0.0, max_value=100.0, value=60.0, step=1.0)
@@ -230,17 +302,6 @@ def render_portfolio() -> None:
     max_position = third.number_input("Maximum position (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
     max_sector = fourth.number_input("Maximum sector (%)", min_value=1.0, max_value=100.0, value=25.0, step=1.0)
     try:
-        if "current_weight" not in data.columns:
-            data["current_weight"] = 0.0
-        data["current_weight"] = data["current_weight"].fillna(0.0)
-        candidates = [
-            PortfolioCandidate(
-                ticker=str(row.ticker), sector=str(row.sector), price=float(row.price),
-                qgvm_score=float(row.qgvm_score), technical_signal=TechnicalSignal(str(row.technical_signal).strip().title()),
-                daily_volatility=float(row.daily_volatility), current_weight=float(row.current_weight),
-            )
-            for row in data.itertuples(index=False)
-        ]
         assessment = PortfolioConstructionEngine().construct(candidates, PortfolioConstraints(
             capital=capital, macro_regime=regime, macro_score=macro_score, risk_score=risk_score,
             var_limit_pct=var_limit / 100, max_position_weight=max_position / 100, max_sector_weight=max_sector / 100,
@@ -269,28 +330,46 @@ def render_risk_management() -> None:
     """Render the VaR workbook-compatible portfolio risk dashboard."""
     st.title("Risk Management")
     st.caption("Historical · Parametric · Monte Carlo VaR · Expected Shortfall")
-    uploaded = st.file_uploader("Upload VaR workbook, price CSV, or return CSV", type=["xlsx", "xls", "csv"])
-    if uploaded is None:
-        st.info("Upload the supplied VaR workbook or a CSV. Select the worksheet/column containing chronological prices or periodic returns.")
-        return
-    try:
-        file_bytes = uploaded.getvalue()
-        if uploaded.name.lower().endswith((".xlsx", ".xls")):
-            workbook = pd.ExcelFile(BytesIO(file_bytes))
-            sheet = st.selectbox("Workbook sheet", workbook.sheet_names)
-            data = pd.read_excel(BytesIO(file_bytes), sheet_name=sheet)
-        else:
-            data = pd.read_csv(BytesIO(file_bytes))
-    except (ValueError, OSError, pd.errors.ParserError) as error:
-        st.error(f"Could not read the uploaded file: {error}")
-        return
+    source = st.radio("Data source", ("Yahoo Finance ticker", "VaR workbook or CSV"), horizontal=True, key="risk_source")
+    data: pd.DataFrame
+    default_column = 0
+    default_input_type = 0
+    if source == "Yahoo Finance ticker":
+        ticker = st.text_input("Yahoo Finance ticker", placeholder="NIFTYBEES.NS, RELIANCE.NS, AAPL", key="risk_ticker")
+        if st.button("Fetch price history for risk analysis", type="primary", key="risk_fetch"):
+            try:
+                st.session_state["risk_yahoo_data"] = YahooFinanceProvider().price_history(ticker).history
+            except MarketDataError as error:
+                st.error(str(error))
+                return
+        if "risk_yahoo_data" not in st.session_state:
+            st.info("Enter a ticker to calculate VaR and risk ratios directly from its adjusted market history.")
+            return
+        data = st.session_state["risk_yahoo_data"]
+        default_column = list(data.select_dtypes(include="number").columns).index("Close")
+    else:
+        uploaded = st.file_uploader("Upload VaR workbook, price CSV, or return CSV", type=["xlsx", "xls", "csv"])
+        if uploaded is None:
+            st.info("Upload the supplied VaR workbook or a CSV. Select the worksheet/column containing chronological prices or periodic returns.")
+            return
+        try:
+            file_bytes = uploaded.getvalue()
+            if uploaded.name.lower().endswith((".xlsx", ".xls")):
+                workbook = pd.ExcelFile(BytesIO(file_bytes))
+                sheet = st.selectbox("Workbook sheet", workbook.sheet_names)
+                data = pd.read_excel(BytesIO(file_bytes), sheet_name=sheet)
+            else:
+                data = pd.read_csv(BytesIO(file_bytes))
+        except (ValueError, OSError, pd.errors.ParserError) as error:
+            st.error(f"Could not read the uploaded file: {error}")
+            return
     numeric_columns = data.select_dtypes(include="number").columns.tolist()
     if not numeric_columns:
         st.error("No numeric columns were found in the selected data source.")
         return
     left, middle, right = st.columns(3)
-    column = left.selectbox("Price or return column", numeric_columns)
-    input_type = middle.selectbox("Input type", ("Prices", "Returns (decimal)", "Returns (%)"))
+    column = left.selectbox("Price or return column", numeric_columns, index=default_column)
+    input_type = middle.selectbox("Input type", ("Prices", "Returns (decimal)", "Returns (%)"), index=default_input_type)
     confidence = right.selectbox("Confidence level", (0.95, 0.99), format_func=lambda value: f"{value:.0%}")
     first, second, third = st.columns(3)
     portfolio_value = first.number_input("Portfolio value", min_value=1.0, value=1_000_000.0, step=10_000.0)
