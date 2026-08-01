@@ -9,10 +9,13 @@ import pandas as pd
 import streamlit as st
 
 from alphalens.domain.macro import MacroInputs
+from alphalens.domain.macro import MarketRegime
+from alphalens.domain.portfolio import PortfolioCandidate, PortfolioConstraints
 from alphalens.domain.risk import RiskConfig
 from alphalens.domain.stock import StockInputs
-from alphalens.domain.technical import TechnicalConfig
+from alphalens.domain.technical import TechnicalConfig, TechnicalSignal
 from alphalens.services.market_regime_engine import MarketRegimeEngine
+from alphalens.services.portfolio_construction_engine import PortfolioConstructionEngine
 from alphalens.services.risk_engine import RiskEngine
 from alphalens.services.stock_analysis_engine import StockAnalysisEngine
 from alphalens.services.technical_analysis_engine import TechnicalAnalysisEngine
@@ -199,7 +202,67 @@ def render_technical_analysis() -> None:
 
 
 def render_portfolio() -> None:
-    render_module_placeholder("Portfolio", "Portfolio construction, allocation, and performance attribution.")
+    """Render the constrained portfolio construction dashboard."""
+    st.title("Portfolio")
+    st.caption("Macro regime · QGVM factors · Technical confirmation · VaR constraints")
+    template = pd.DataFrame(columns=["ticker", "sector", "price", "qgvm_score", "technical_signal", "daily_volatility", "current_weight"])
+    st.download_button("Download portfolio input template", template.to_csv(index=False), "portfolio_candidates_template.csv", "text/csv")
+    uploaded = st.file_uploader("Upload portfolio candidates CSV", type="csv", help="Use the template; daily volatility and current weight must be decimal values, e.g. 0.02 and 0.05.")
+    if uploaded is None:
+        st.info("Upload candidate holdings to construct a portfolio. Use results from the Stock and Technical modules for QGVM score and technical signal.")
+        return
+    try:
+        data = pd.read_csv(uploaded)
+        required = {"ticker", "sector", "price", "qgvm_score", "technical_signal", "daily_volatility"}
+        missing = required - set(data.columns)
+        if missing:
+            raise ValueError(f"Candidate file is missing: {', '.join(sorted(missing))}.")
+    except (ValueError, pd.errors.ParserError) as error:
+        st.error(str(error))
+        return
+    first, second, third = st.columns(3)
+    regime = first.selectbox("Macro regime", list(MarketRegime), format_func=lambda value: value.value)
+    macro_score = second.number_input("Macro Score", min_value=0.0, max_value=100.0, value=60.0, step=1.0)
+    risk_score = third.number_input("Risk Score", min_value=0.0, max_value=100.0, value=40.0, step=1.0)
+    first, second, third, fourth = st.columns(4)
+    capital = first.number_input("Portfolio capital", min_value=1.0, value=1_000_000.0, step=10_000.0)
+    var_limit = second.number_input("Maximum daily VaR (%)", min_value=0.1, max_value=20.0, value=2.0, step=0.1)
+    max_position = third.number_input("Maximum position (%)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
+    max_sector = fourth.number_input("Maximum sector (%)", min_value=1.0, max_value=100.0, value=25.0, step=1.0)
+    try:
+        if "current_weight" not in data.columns:
+            data["current_weight"] = 0.0
+        data["current_weight"] = data["current_weight"].fillna(0.0)
+        candidates = [
+            PortfolioCandidate(
+                ticker=str(row.ticker), sector=str(row.sector), price=float(row.price),
+                qgvm_score=float(row.qgvm_score), technical_signal=TechnicalSignal(str(row.technical_signal).strip().title()),
+                daily_volatility=float(row.daily_volatility), current_weight=float(row.current_weight),
+            )
+            for row in data.itertuples(index=False)
+        ]
+        assessment = PortfolioConstructionEngine().construct(candidates, PortfolioConstraints(
+            capital=capital, macro_regime=regime, macro_score=macro_score, risk_score=risk_score,
+            var_limit_pct=var_limit / 100, max_position_weight=max_position / 100, max_sector_weight=max_sector / 100,
+        ))
+    except (TypeError, ValueError) as error:
+        st.error(f"Portfolio input error: {error}")
+        return
+    first, second, third, fourth = st.columns(4)
+    first.metric("Invested", f"{assessment.invested_weight:.1%}")
+    second.metric("Cash reserve", f"{assessment.cash_weight:.1%}")
+    third.metric("Estimated 99% daily VaR", f"{assessment.estimated_var:,.0f}")
+    fourth.metric("Rebalancing", assessment.rebalancing_summary.split(" of")[0])
+    st.subheader("Target holdings and rebalancing")
+    st.dataframe([{
+        "Ticker": item.ticker, "Sector": item.sector, "Composite signal": item.score,
+        "Current weight": f"{item.current_weight:.1%}", "Target weight": f"{item.target_weight:.1%}",
+        "Target notional": round(item.target_notional, 2), "Target shares": item.target_shares, "Action": item.rebalance_action,
+    } for item in assessment.positions], hide_index=True, use_container_width=True)
+    st.subheader("Sector allocation")
+    st.bar_chart(pd.DataFrame.from_dict(assessment.sector_allocations, orient="index", columns=["Target weight"]), use_container_width=True)
+    for item in assessment.rationale:
+        st.write(f"• {item}")
 
 
 def render_risk_management() -> None:
